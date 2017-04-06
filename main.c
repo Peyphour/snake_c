@@ -9,22 +9,27 @@ typedef enum {
     DOWN
 } DIRECTION;
 
-#define W_WIDTH 1000
-#define W_HEIGHT 1000
+typedef struct {
+    list *snake;
+    POINT *apple;
+} game_state;
+
+#define W_WIDTH 500
+#define W_HEIGHT 500
 #define STEP 100
 
 #define STEP_W W_WIDTH / STEP
 #define STEP_H W_HEIGHT / STEP
 
 DIRECTION currentDirection;
-int running, drawStart;
+int running, drawStart, autoRunning;
 POINT apple;
 
 void new_apple() {
-    apple.y = (rand() % STEP) * STEP_H;
-    apple.x = (rand() % STEP) * STEP_W;
+    apple.y = (rand() % (STEP - 1)) * STEP_H;
+    apple.x = (rand() % (STEP - 1)) * STEP_W;
 
-    printf("new apple at %d/%d", apple.x, apple.y);
+    printf("new apple at %d/%d\n", apple.x, apple.y);
 
     POINT p2 = {apple.x + STEP_W, apple.y - STEP_H};
 
@@ -109,14 +114,41 @@ static void *draw(void *data) {
             running = 0;
         affiche_all();
 
-        usleep(20000);
+        usleep(10000);
     }
     return NULL;
 }
 
+POINT get_auto_arrow(game_state *state) {
+    POINT *head = state->snake->head->data;
+
+    POINT arrow = {0, 0};
+
+    if(head->x - apple.x < 0)
+        arrow.x = 1;
+    else if(head->x - apple.x > 0)
+        arrow.x = -1;
+    else if(head->y - apple.y < 0)
+        arrow.y = 1;
+    else if(head->y - apple.y > 0)
+        arrow.y = -1;
+
+    return arrow;
+}
+
 static void *processKeyboard(void *data) {
+
+    game_state *state = (game_state *) data;
+
     while (running) {
-        POINT p = get_arrow();
+
+        POINT p;
+
+        if(autoRunning)
+            p = get_auto_arrow(state);
+        else
+            p = get_arrow();
+
         if (p.x < 0)
             currentDirection = LEFT;
         else if (p.x > 0)
@@ -160,9 +192,16 @@ void initSnake(list *snake, int size, DIRECTION initialDirection, int initX, int
     currentDirection = initialDirection;
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+
+    game_state state;
 
     init_graphics(W_WIDTH, W_HEIGHT, "test");
+
+    if(argc > 1) {
+        if(!strcmp(argv[1], "auto"))
+            autoRunning = 1;
+    }
 
     running = 1;
 
@@ -173,14 +212,17 @@ int main() {
 
     srand((unsigned int) time(NULL));
 
-    initSnake(&snake, 15, UP, 50, 50);
+    initSnake(&snake, 5, UP, 20, 20);
 
     new_apple();
+
+    state.apple = &apple;
+    state.snake = &snake;
 
     pthread_t drawThread, keyboardThread;
 
     pthread_create(&drawThread, NULL, draw, &snake);
-    pthread_create(&keyboardThread, NULL, processKeyboard, NULL);
+    pthread_create(&keyboardThread, NULL, processKeyboard, &state);
 
     pthread_join(drawThread, NULL);
     pthread_join(keyboardThread, NULL);
