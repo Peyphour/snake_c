@@ -1,0 +1,1 @@
+/usr/bin/cc     CMakeFiles/untitled.dir/main.c.o CMakeFiles/untitled.dir/graphics.c.o CMakeFiles/untitled.dir/list.c.o  -o untitled -lm -lSDL -lSDL_net -lpthread 
