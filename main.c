@@ -87,10 +87,6 @@ void *calculateNextGeneration(void *data) {
         running = false;
     }
 
-    if(p->x == apple.x && p->y == apple.y) {
-        new_apple();
-    }
-
     return p;
 }
 
@@ -99,12 +95,18 @@ static void *draw(void *data) {
         drawStart = 1;
         list_for_each((list *) data, recoverSnakeInBlack);
         list_prepend((list *) data, calculateNextGeneration(((list *) data)->head->data));
-        list_delete_last((list *) data);
+
+        POINT *head = ((list *) data)->head->data;
+        if(head->x == apple.x && head->y == apple.y) {
+            new_apple();
+        } else {
+            list_delete_last((list *) data);
+        }
+
         list_for_each((list *) data, drawList);
 
         if (list_has_duplicate((list *) data))
             running = 0;
-
         affiche_all();
 
         usleep(20000);
