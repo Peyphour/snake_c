@@ -1,4 +1,5 @@
 #include "list.h"
+#include <X11/Xlib.h>
 #include "graphics.h"
 #include <pthread.h>
 
@@ -14,24 +15,41 @@ typedef struct {
     POINT *apple;
 } game_state;
 
+typedef struct {
+    POINT *place;
+    DIRECTION next_direction
+} game_event;
+
 #define W_WIDTH 500
 #define W_HEIGHT 500
-#define STEP 100
+#define STEP 50
 
-#define STEP_W W_WIDTH / STEP
-#define STEP_H W_HEIGHT / STEP
+#define CLOCK 7000
+
+#define STEP_W (W_WIDTH / STEP)
+#define STEP_H (W_HEIGHT / STEP)
 
 DIRECTION currentDirection;
 int running, drawStart, autoRunning;
 POINT apple;
 
-void new_apple() {
-    apple.y = (rand() % (STEP - 1)) * STEP_H;
-    apple.x = (rand() % (STEP - 1)) * STEP_W;
+bool obstacle_in_direction(list *snake, DIRECTION direction);
 
-    printf("new apple at %d/%d\n", apple.x, apple.y);
+int random_range(int min, int max) {
+    return min + rand() / (RAND_MAX / (max - min + 1) + 1);
+}
 
-    POINT p2 = {apple.x + STEP_W, apple.y - STEP_H};
+void new_apple(list *snake) {
+
+    POINT p2;
+    do {
+        apple.y = random_range(2, STEP - 2) * STEP_H;
+        apple.x = random_range(2, STEP - 2) * STEP_W;
+
+        p2.x = apple.x + STEP_W;
+        p2.y = apple.y - STEP_H;
+    } while (list_count_occurences(snake, &apple) > 1);
+
 
     draw_fill_rectangle(apple, p2, vert);
 }
@@ -42,9 +60,10 @@ bool drawList(void *data) {
     p.y = ((POINT *) data)->y;
     p.x = ((POINT *) data)->x;
 
+
     POINT p2 = {p.x + STEP_W, p.y - STEP_H};
 
-    if(drawStart) {
+    if (drawStart) {
         draw_fill_rectangle(p, p2, rouge);
         drawStart = 0;
     } else
@@ -102,8 +121,8 @@ static void *draw(void *data) {
         list_prepend((list *) data, calculateNextGeneration(((list *) data)->head->data));
 
         POINT *head = ((list *) data)->head->data;
-        if(head->x == apple.x && head->y == apple.y) {
-            new_apple();
+        if (head->x == apple.x && head->y == apple.y) {
+            new_apple((list *) data);
         } else {
             list_delete_last((list *) data);
         }
@@ -114,27 +133,96 @@ static void *draw(void *data) {
             running = 0;
         affiche_all();
 
-        usleep(10000);
+        usleep(CLOCK);
     }
     return NULL;
 }
 
+bool obstacle_in_direction(list *snake, DIRECTION direction) {
+
+    POINT *head = snake->head->data;
+
+    switch (direction) {
+        case UP:
+            for (int i = head->y + STEP_H; i < W_HEIGHT; i += STEP_H) {
+                POINT p = {head->x, i};
+                if (list_count_occurences(snake, &p))
+                    return (bool) TRUE;
+            }
+            break;
+        case DOWN:
+            for (int i = head->y - STEP_H; i > 0; i -= STEP_H) {
+                POINT p = {head->x, i};
+                if (list_count_occurences(snake, &p))
+                    return (bool) TRUE;
+            }
+            break;
+        case LEFT:
+            for (int i = head->x + STEP_W; i < W_WIDTH; i += STEP_W) {
+                POINT p = {i, head->y};
+                if (list_count_occurences(snake, &p))
+                    return (bool) TRUE;
+            }
+            break;
+        case RIGHT:
+            for (int i = head->x - STEP_W; i > 0; i -= STEP_W) {
+                POINT p = {i, head->y};
+                if (list_count_occurences(snake, &p))
+                    return (bool) TRUE;
+            }
+            break;
+    }
+
+    return (bool) FALSE;
+}
+
+POINT get_first_direction_without_obstacle(list *snake) {
+
+    POINT arrow = {0, 0};
+
+    if (!obstacle_in_direction(snake, LEFT) && currentDirection != RIGHT) {
+        arrow.x = -1;
+    } else if (obstacle_in_direction(snake, LEFT) && !obstacle_in_direction(snake, DOWN) && currentDirection != UP) {
+        arrow.y = -1;
+    } else if (obstacle_in_direction(snake, LEFT) && obstacle_in_direction(snake, DOWN) &&
+               !obstacle_in_direction(snake, RIGHT) && currentDirection != LEFT) {
+        arrow.x = 1;
+    } else if (obstacle_in_direction(snake, LEFT) && obstacle_in_direction(snake, DOWN) &&
+               obstacle_in_direction(snake, RIGHT)
+               && !obstacle_in_direction(snake, UP) && currentDirection != DOWN) {
+        arrow.y = 1;
+    }
+
+    return arrow;
+}
+
+
 POINT get_auto_arrow(game_state *state) {
+
     POINT *head = state->snake->head->data;
 
     POINT arrow = {0, 0};
 
-    if(head->x - apple.x < 0)
+    if (head->x - apple.x < 0)
         arrow.x = 1;
-    else if(head->x - apple.x > 0)
+    else if (head->x - apple.x > 0)
         arrow.x = -1;
-    else if(head->y - apple.y < 0)
+    else if (head->y - apple.y < 0)
         arrow.y = 1;
-    else if(head->y - apple.y > 0)
+    else if (head->y - apple.y > 0)
         arrow.y = -1;
+
+
+    if (arrow.x > 0 && obstacle_in_direction(state->snake, LEFT) ||
+        arrow.x < 0 && obstacle_in_direction(state->snake, RIGHT)
+        || arrow.y > 0 && obstacle_in_direction(state->snake, UP) ||
+        arrow.y < 0 && obstacle_in_direction(state->snake, DOWN)) {
+        arrow = get_first_direction_without_obstacle(state->snake);
+    }
 
     return arrow;
 }
+
 
 static void *processKeyboard(void *data) {
 
@@ -144,7 +232,7 @@ static void *processKeyboard(void *data) {
 
         POINT p;
 
-        if(autoRunning)
+        if (autoRunning)
             p = get_auto_arrow(state);
         else
             p = get_arrow();
@@ -157,6 +245,9 @@ static void *processKeyboard(void *data) {
             currentDirection = DOWN;
         else if (p.y > 0)
             currentDirection = UP;
+
+        usleep(CLOCK / 2);
+
     }
     return NULL;
 }
@@ -196,10 +287,12 @@ int main(int argc, char *argv[]) {
 
     game_state state;
 
+    XInitThreads();
     init_graphics(W_WIDTH, W_HEIGHT, "test");
 
-    if(argc > 1) {
-        if(!strcmp(argv[1], "auto"))
+
+    if (argc > 1) {
+        if (!strcmp(argv[1], "auto"))
             autoRunning = 1;
     }
 
@@ -212,9 +305,9 @@ int main(int argc, char *argv[]) {
 
     srand((unsigned int) time(NULL));
 
-    initSnake(&snake, 5, UP, 20, 20);
+    initSnake(&snake, STEP / 10, UP, STEP / 2, STEP / 2);
 
-    new_apple();
+    new_apple(&snake);
 
     state.apple = &apple;
     state.snake = &snake;

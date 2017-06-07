@@ -51,6 +51,8 @@ graphics.h
 /home/bertrand/CLionProjects/untitled/main.c
 list.h
 /home/bertrand/CLionProjects/untitled/list.h
+X11/Xlib.h
+-
 graphics.h
 /home/bertrand/CLionProjects/untitled/graphics.h
 pthread.h

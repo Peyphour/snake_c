@@ -41,7 +41,7 @@ void list_head(list *list, void *element, bool removeFromList);
 void list_tail(list *list, void *element);
 
 void list_delete_last(list *list);
-
+int list_count_occurences(list *list, void *data);
 
 int list_has_duplicate(list *list);
 #endif

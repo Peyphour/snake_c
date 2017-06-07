@@ -32,7 +32,7 @@
 // ##################################
 
 // D�finit SDL_TTF_OK ou non
-#define SDL_TTF_O
+#define SDL_TTF_OK 1
 
 #ifdef SDL_TTF_OK
 //	#include <SDL_ttf.h>
