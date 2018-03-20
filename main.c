@@ -1,33 +1,9 @@
-#include "list.h"
+#include "lib/list.h"
 #include <X11/Xlib.h>
-#include "graphics.h"
+#include "lib/graphics.h"
+#include "types.h"
+#include "constants.h"
 #include <pthread.h>
-
-typedef enum {
-    LEFT,
-    RIGHT,
-    UP,
-    DOWN
-} DIRECTION;
-
-typedef struct {
-    list *snake;
-    POINT *apple;
-} game_state;
-
-typedef struct {
-    POINT *place;
-    DIRECTION next_direction
-} game_event;
-
-#define W_WIDTH 500
-#define W_HEIGHT 500
-#define STEP 50
-
-#define CLOCK 7000
-
-#define STEP_W (W_WIDTH / STEP)
-#define STEP_H (W_HEIGHT / STEP)
 
 DIRECTION currentDirection;
 int running, drawStart, autoRunning;

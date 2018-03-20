@@ -23,6 +23,8 @@
 // 10.DIVERS ......................... ligne 303
 // #############################################
 
+#ifndef __GRAPHICS_H
+#define __GRAPHICS_H
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -488,3 +490,5 @@ unsigned int port_du_client();
 
 // 9.1 Renvoie la distance entre deux points
 int distance(POINT P1, POINT P2);
+
+#endif // __GRAPHICS_H
