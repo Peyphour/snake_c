@@ -1,9 +1,8 @@
-#include "lib/list.h"
 #include <X11/Xlib.h>
-#include "lib/graphics.h"
 #include "types.h"
 #include "constants.h"
 #include <pthread.h>
+#include <linked_list.h>
 
 DIRECTION currentDirection;
 int running, drawStart, autoRunning;
@@ -86,6 +85,8 @@ void *calculateNextGeneration(void *data) {
     if (p->x < STEP_W || p->x >= (W_WIDTH - STEP_W) || p->y < STEP_H || p->y > W_HEIGHT) {
         running = false;
     }
+
+    printf("running : %d\n", running);
 
     return p;
 }
@@ -267,6 +268,7 @@ int main(int argc, char *argv[]) {
     init_graphics(W_WIDTH, W_HEIGHT, "test");
 
 
+
     if (argc > 1) {
         if (!strcmp(argv[1], "auto"))
             autoRunning = 1;
@@ -278,6 +280,8 @@ int main(int argc, char *argv[]) {
 
     list snake;
     list_new(&snake, sizeof(POINT), NULL);
+
+    printf("%d/%d", sizeof(POINT), snake.elementSize);
 
     srand((unsigned int) time(NULL));
 

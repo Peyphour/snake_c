@@ -5,8 +5,8 @@
 #ifndef UNTITLED_TYPES_H
 #define UNTITLED_TYPES_H
 
-#include "lib/graphics.h"
-#include "lib/list.h"
+#include <linked_list.h>
+#include <graphics.h>
 
 typedef enum {
     LEFT,
