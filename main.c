@@ -2,19 +2,19 @@
 #include "types.h"
 #include "constants.h"
 #include <pthread.h>
-#include <linked_list.h>
+#include "astar.h"
 
 DIRECTION currentDirection;
 int running, drawStart, autoRunning;
 POINT apple;
-
-bool obstacle_in_direction(list *snake, DIRECTION direction);
+game_state state;
+list snake;
 
 int random_range(int min, int max) {
     return min + rand() / (RAND_MAX / (max - min + 1) + 1);
 }
 
-void new_apple(list *snake) {
+void new_apple() {
 
     POINT p2;
     do {
@@ -23,7 +23,11 @@ void new_apple(list *snake) {
 
         p2.x = apple.x + STEP_W;
         p2.y = apple.y - STEP_H;
-    } while (list_count_occurences(snake, &apple) > 1);
+    } while (list_count_occurences(&snake, &apple) > 1);
+
+    POINT start = {0, 0};
+    POINT end = {WIDTH, HEIGHT};
+    draw_fill_rectangle(start, end, black);
 
 
     draw_fill_rectangle(apple, p2, vert);
@@ -86,27 +90,25 @@ void *calculateNextGeneration(void *data) {
         running = false;
     }
 
-    printf("running : %d\n", running);
-
     return p;
 }
 
 static void *draw(void *data) {
     while (running) {
         drawStart = 1;
-        list_for_each((list *) data, recoverSnakeInBlack);
-        list_prepend((list *) data, calculateNextGeneration(((list *) data)->head->data));
+        list_for_each(&snake, recoverSnakeInBlack);
+        list_prepend(&snake, calculateNextGeneration(snake.head->data));
 
-        POINT *head = ((list *) data)->head->data;
+        POINT *head = snake.head->data;
         if (head->x == apple.x && head->y == apple.y) {
-            new_apple((list *) data);
+            new_apple();
         } else {
-            list_delete_last((list *) data);
+            list_delete_last(&snake);
         }
 
-        list_for_each((list *) data, drawList);
+        list_for_each(&snake, drawList);
 
-        if (list_has_duplicate((list *) data))
+        if (list_has_duplicate(&snake))
             running = 0;
         affiche_all();
 
@@ -115,102 +117,90 @@ static void *draw(void *data) {
     return NULL;
 }
 
-bool obstacle_in_direction(list *snake, DIRECTION direction) {
-
-    POINT *head = snake->head->data;
-
-    switch (direction) {
-        case UP:
-            for (int i = head->y + STEP_H; i < W_HEIGHT; i += STEP_H) {
-                POINT p = {head->x, i};
-                if (list_count_occurences(snake, &p))
-                    return (bool) TRUE;
-            }
-            break;
-        case DOWN:
-            for (int i = head->y - STEP_H; i > 0; i -= STEP_H) {
-                POINT p = {head->x, i};
-                if (list_count_occurences(snake, &p))
-                    return (bool) TRUE;
-            }
-            break;
-        case LEFT:
-            for (int i = head->x + STEP_W; i < W_WIDTH; i += STEP_W) {
-                POINT p = {i, head->y};
-                if (list_count_occurences(snake, &p))
-                    return (bool) TRUE;
-            }
-            break;
-        case RIGHT:
-            for (int i = head->x - STEP_W; i > 0; i -= STEP_W) {
-                POINT p = {i, head->y};
-                if (list_count_occurences(snake, &p))
-                    return (bool) TRUE;
-            }
-            break;
-    }
-
-    return (bool) FALSE;
+static int mapAt(int x, int y) {
+    //printf("mapAt(%d, %d)\n", (x % STEP) * STEP_W, (y % STEP) * STEP_H);
+    if(x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
+        POINT tmp = {(x % STEP) * STEP_W, (y % STEP) * STEP_H};
+        if(list_count_occurences(&snake, &tmp) == 0) { // No snake in here
+            return 0;
+        } else {
+            return 1;
+        }
+    } else
+        return -1;
 }
 
-POINT get_first_direction_without_obstacle(list *snake) {
+static void pathNodeNeighours(ASNeighborList neighborList, void *node, void *context) {
+    POINT *pathNode = node;
 
-    POINT arrow = {0, 0};
-
-    if (!obstacle_in_direction(snake, LEFT) && currentDirection != RIGHT) {
-        arrow.x = -1;
-    } else if (obstacle_in_direction(snake, LEFT) && !obstacle_in_direction(snake, DOWN) && currentDirection != UP) {
-        arrow.y = -1;
-    } else if (obstacle_in_direction(snake, LEFT) && obstacle_in_direction(snake, DOWN) &&
-               !obstacle_in_direction(snake, RIGHT) && currentDirection != LEFT) {
-        arrow.x = 1;
-    } else if (obstacle_in_direction(snake, LEFT) && obstacle_in_direction(snake, DOWN) &&
-               obstacle_in_direction(snake, RIGHT)
-               && !obstacle_in_direction(snake, UP) && currentDirection != DOWN) {
-        arrow.y = 1;
+    if (mapAt(pathNode->x+1, pathNode->y) == 0) {
+        POINT tmp = {pathNode->x+ STEP_W, pathNode->y};
+        ASNeighborListAdd(neighborList, &tmp, 1);
     }
-
-    return arrow;
+    if (mapAt(pathNode->x-1, pathNode->y) == 0) {
+        POINT tmp = {pathNode->x- STEP_W, pathNode->y};
+        ASNeighborListAdd(neighborList, &tmp, 1);
+    }
+    if (mapAt(pathNode->x, pathNode->y+1) == 0) {
+        POINT tmp = {pathNode->x, pathNode->y+STEP_H};
+        ASNeighborListAdd(neighborList, &tmp, 1);
+    }
+    if (mapAt(pathNode->x, pathNode->y-1) == 0) {
+        POINT tmp = {pathNode->x, pathNode->y-STEP_H};
+        ASNeighborListAdd(neighborList, &tmp, 1);
+    }
 }
 
+static float pathNodeHeuristic(void *fromNode, void *toNode, void *context) {
+    POINT *from = fromNode;
+    POINT *to = toNode;
 
-POINT get_auto_arrow(game_state *state) {
+    return (float) (fabs(from->x - to->x) * STEP_W + fabs(from->y - to->y) * STEP_H);
+}
 
-    POINT *head = state->snake->head->data;
+POINT get_auto_arrow() {
 
-    POINT arrow = {0, 0};
+    ASPathNodeSource source = {
+            sizeof(POINT),
+            &pathNodeNeighours,
+            &pathNodeHeuristic,
+            NULL,
+            NULL
+    };
 
-    if (head->x - apple.x < 0)
-        arrow.x = 1;
-    else if (head->x - apple.x > 0)
-        arrow.x = -1;
-    else if (head->y - apple.y < 0)
-        arrow.y = 1;
-    else if (head->y - apple.y > 0)
-        arrow.y = -1;
+    ASPath path = ASPathCreate(&source, NULL, snake.head->data, &apple);
 
+    if(ASPathGetCount(path) >= 1) {
+        for(int i = 0; i < ASPathGetCount(path); i++) {
+            POINT *node = ASPathGetNode(path, i);
+            POINT drawRec = {node->x + STEP_W / 2, node->y - STEP_H / 2};
+            draw_fill_rectangle(*node, drawRec, blanc);
+        }
+        POINT *firstDirection = ASPathGetNode(path, 1);
+        POINT direction = {
+                (firstDirection->x - ((POINT*) snake.head->data)->x),
+                (firstDirection->y - ((POINT*) snake.head->data)->y)
+        };
+        printf("direction(%d, %d) ", direction.x, direction.y);
+        printf("head(%d, %d) firstDirection(%d, %d)\n", ((POINT*) snake.head->data)->x, ((POINT*) snake.head->data)->y, firstDirection->x, firstDirection->y);
 
-    if (arrow.x > 0 && obstacle_in_direction(state->snake, LEFT) ||
-        arrow.x < 0 && obstacle_in_direction(state->snake, RIGHT)
-        || arrow.y > 0 && obstacle_in_direction(state->snake, UP) ||
-        arrow.y < 0 && obstacle_in_direction(state->snake, DOWN)) {
-        arrow = get_first_direction_without_obstacle(state->snake);
+        return direction;
+    } else {
+        printf("no path\n");
     }
-
-    return arrow;
+    POINT defaultDirection = {0, 0};
+    return defaultDirection;
 }
 
 
 static void *processKeyboard(void *data) {
-
-    game_state *state = (game_state *) data;
 
     while (running) {
 
         POINT p;
 
         if (autoRunning)
-            p = get_auto_arrow(state);
+            p = get_auto_arrow();
         else
             p = get_arrow();
 
@@ -229,30 +219,30 @@ static void *processKeyboard(void *data) {
     return NULL;
 }
 
-void initSnake(list *snake, int size, DIRECTION initialDirection, int initX, int initY) {
+void initSnake(int size, DIRECTION initialDirection, int initX, int initY) {
     switch (initialDirection) {
         case LEFT:
             for (int i = 0; i < size; i++) {
                 POINT p = {(initX + i) * STEP_W, initY * STEP_H};
-                list_append(snake, &p);
+                list_append(&snake, &p);
             }
             break;
         case RIGHT:
             for (int i = 0; i < size; i++) {
                 POINT p = {(initX - i) * STEP_W, initY * STEP_H};
-                list_append(snake, &p);
+                list_append(&snake, &p);
             }
             break;
         case UP:
             for (int i = 0; i < size; i++) {
                 POINT p = {initX * STEP_W, (initY - i) * STEP_H};
-                list_append(snake, &p);
+                list_append(&snake, &p);
             }
             break;
         case DOWN:
             for (int i = 0; i < size; i++) {
                 POINT p = {initX * STEP_W, (initY + i) * STEP_H};
-                list_append(snake, &p);
+                list_append(&snake, &p);
             }
             break;
     }
@@ -262,12 +252,8 @@ void initSnake(list *snake, int size, DIRECTION initialDirection, int initX, int
 
 int main(int argc, char *argv[]) {
 
-    game_state state;
-
     XInitThreads();
     init_graphics(W_WIDTH, W_HEIGHT, "test");
-
-
 
     if (argc > 1) {
         if (!strcmp(argv[1], "auto"))
@@ -278,24 +264,21 @@ int main(int argc, char *argv[]) {
 
     affiche_auto_off();
 
-    list snake;
     list_new(&snake, sizeof(POINT), NULL);
-
-    printf("%d/%d", sizeof(POINT), snake.elementSize);
 
     srand((unsigned int) time(NULL));
 
-    initSnake(&snake, STEP / 10, UP, STEP / 2, STEP / 2);
+    initSnake(STEP / 10, LEFT, STEP / 2, STEP / 2);
 
-    new_apple(&snake);
+    new_apple();
 
     state.apple = &apple;
     state.snake = &snake;
 
     pthread_t drawThread, keyboardThread;
 
-    pthread_create(&drawThread, NULL, draw, &snake);
-    pthread_create(&keyboardThread, NULL, processKeyboard, &state);
+    pthread_create(&drawThread, NULL, draw, NULL);
+    pthread_create(&keyboardThread, NULL, processKeyboard, NULL);
 
     pthread_join(drawThread, NULL);
     pthread_join(keyboardThread, NULL);

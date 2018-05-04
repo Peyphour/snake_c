@@ -9,7 +9,7 @@
 #define W_HEIGHT 500
 #define STEP 50
 
-#define CLOCK 7000
+#define CLOCK 10000
 
 #define STEP_W (W_WIDTH / STEP)
 #define STEP_H (W_HEIGHT / STEP)
