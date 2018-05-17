@@ -19,6 +19,7 @@ int random_range(int min, int max) {
 
 void new_apple() {
 
+    fill_screen(noir);
     POINT previousApple = {apple.x, apple.y};
     POINT p2;
     do {
@@ -89,7 +90,7 @@ void *calculateNextGeneration(void *data) {
     switch (currentDirection) {
         case LEFT:
             p->x -= STEP_W;
-            if(p->x == 0) p->x = W_WIDTH;
+            if(p->x == -STEP_W) p->x = W_WIDTH;
             break;
         case RIGHT:
             p->x += STEP_W;
@@ -101,7 +102,7 @@ void *calculateNextGeneration(void *data) {
             break;
         case DOWN:
             p->y -= STEP_H;
-            if(p->y == 0) p->y = W_HEIGHT;
+            if(p->y == -STEP_H) p->y = W_HEIGHT;
             break;
     }
 
@@ -229,7 +230,7 @@ POINT get_auto_arrow() {
 
     if(ASPathGetCount(path) >= 1) {
 #if DEBUG == 1
-        for(int i = 0; i < ASPathGetCount(path); i++) {
+        for(int i = 0; i < ASPathGetCount(path) - 1; i++) {
             POINT *node = ASPathGetNode(path, i);
             POINT drawRec = {node->x + STEP_W , node->y - STEP_H };
             draw_fill_rectangle(*node, drawRec, blanc);
