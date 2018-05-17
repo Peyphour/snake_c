@@ -5,11 +5,11 @@
 #ifndef UNTITLED_CONSTANTS_H
 #define UNTITLED_CONSTANTS_H
 
-#define W_WIDTH 500
-#define W_HEIGHT 500
 #define STEP 50
+#define W_WIDTH (STEP * 10)
+#define W_HEIGHT (STEP * 10)
 
-#define CLOCK 10000
+#define CLOCK 1S0000
 
 #define STEP_W (W_WIDTH / STEP)
 #define STEP_H (W_HEIGHT / STEP)

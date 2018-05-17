@@ -2,6 +2,7 @@
 #include "types.h"
 #include "constants.h"
 #include <pthread.h>
+#include <semaphore.h>
 #include "astar.h"
 
 DIRECTION currentDirection;
@@ -9,6 +10,7 @@ int running, drawStart, autoRunning;
 POINT apple;
 game_state state;
 list snake;
+sem_t mutex;
 
 int random_range(int min, int max) {
     return min + rand() / (RAND_MAX / (max - min + 1) + 1);
@@ -31,6 +33,11 @@ void new_apple() {
 
 
     draw_fill_rectangle(apple, p2, vert);
+}
+
+bool print_snake(void *data) {
+    printf("POINT(%d, %d) ", ((POINT *) data)->x, ((POINT *) data)->y);
+    return (bool) TRUE;
 }
 
 bool drawList(void *data) {
@@ -95,6 +102,9 @@ void *calculateNextGeneration(void *data) {
 
 static void *draw(void *data) {
     while (running) {
+
+        sem_wait(&mutex);
+
         drawStart = 1;
         list_for_each(&snake, recoverSnakeInBlack);
         list_prepend(&snake, calculateNextGeneration(snake.head->data));
@@ -112,15 +122,18 @@ static void *draw(void *data) {
             running = 0;
         affiche_all();
 
+        sem_post(&mutex);
+
         usleep(CLOCK);
     }
     return NULL;
 }
 
 static int mapAt(int x, int y) {
-    //printf("mapAt(%d, %d)\n", (x % STEP) * STEP_W, (y % STEP) * STEP_H);
-    if(x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
-        POINT tmp = {(x % STEP) * STEP_W, (y % STEP) * STEP_H};
+    if(x >= 0 && x < W_WIDTH && y >= 0 && y < W_HEIGHT) {
+        POINT tmp = {x, y};
+        POINT tmp1 = {tmp.x + STEP_W, tmp.y - STEP_H};
+        draw_fill_rectangle(tmp, tmp1, rouge);
         if(list_count_occurences(&snake, &tmp) == 0) { // No snake in here
             return 0;
         } else {
@@ -130,22 +143,22 @@ static int mapAt(int x, int y) {
         return -1;
 }
 
-static void pathNodeNeighours(ASNeighborList neighborList, void *node, void *context) {
+static void pathNodeNeighbours(ASNeighborList neighborList, void *node, void *context) {
     POINT *pathNode = node;
 
-    if (mapAt(pathNode->x+1, pathNode->y) == 0) {
-        POINT tmp = {pathNode->x+ STEP_W, pathNode->y};
+    if (mapAt(pathNode->x+STEP_W, pathNode->y) == 0) {
+        POINT tmp = {pathNode->x + STEP_W, pathNode->y};
         ASNeighborListAdd(neighborList, &tmp, 1);
     }
-    if (mapAt(pathNode->x-1, pathNode->y) == 0) {
+    if (mapAt(pathNode->x-STEP_W, pathNode->y) == 0) {
         POINT tmp = {pathNode->x- STEP_W, pathNode->y};
         ASNeighborListAdd(neighborList, &tmp, 1);
     }
-    if (mapAt(pathNode->x, pathNode->y+1) == 0) {
+    if (mapAt(pathNode->x, pathNode->y+STEP_H) == 0) {
         POINT tmp = {pathNode->x, pathNode->y+STEP_H};
         ASNeighborListAdd(neighborList, &tmp, 1);
     }
-    if (mapAt(pathNode->x, pathNode->y-1) == 0) {
+    if (mapAt(pathNode->x, pathNode->y-STEP_H) == 0) {
         POINT tmp = {pathNode->x, pathNode->y-STEP_H};
         ASNeighborListAdd(neighborList, &tmp, 1);
     }
@@ -160,9 +173,11 @@ static float pathNodeHeuristic(void *fromNode, void *toNode, void *context) {
 
 POINT get_auto_arrow() {
 
+    sem_wait(&mutex);
+
     ASPathNodeSource source = {
             sizeof(POINT),
-            &pathNodeNeighours,
+            &pathNodeNeighbours,
             &pathNodeHeuristic,
             NULL,
             NULL
@@ -173,7 +188,7 @@ POINT get_auto_arrow() {
     if(ASPathGetCount(path) >= 1) {
         for(int i = 0; i < ASPathGetCount(path); i++) {
             POINT *node = ASPathGetNode(path, i);
-            POINT drawRec = {node->x + STEP_W / 2, node->y - STEP_H / 2};
+            POINT drawRec = {node->x + STEP_W , node->y - STEP_H };
             draw_fill_rectangle(*node, drawRec, blanc);
         }
         POINT *firstDirection = ASPathGetNode(path, 1);
@@ -182,13 +197,19 @@ POINT get_auto_arrow() {
                 (firstDirection->y - ((POINT*) snake.head->data)->y)
         };
         printf("direction(%d, %d) ", direction.x, direction.y);
+        if((abs(direction.x + direction.y) != STEP_W && abs(direction.x + direction.y) != STEP_H) || list_count_occurences(&snake, firstDirection) > 0) {
+            direction.x = 0; direction.y = 0;
+        }
         printf("head(%d, %d) firstDirection(%d, %d)\n", ((POINT*) snake.head->data)->x, ((POINT*) snake.head->data)->y, firstDirection->x, firstDirection->y);
-
+        ASPathDestroy(path);
+        sem_post(&mutex);
         return direction;
     } else {
         printf("no path\n");
     }
+    ASPathDestroy(path);
     POINT defaultDirection = {0, 0};
+    sem_post(&mutex);
     return defaultDirection;
 }
 
@@ -275,6 +296,8 @@ int main(int argc, char *argv[]) {
     state.apple = &apple;
     state.snake = &snake;
 
+    sem_init(&mutex, 0, 1);
+
     pthread_t drawThread, keyboardThread;
 
     pthread_create(&drawThread, NULL, draw, NULL);
@@ -282,6 +305,7 @@ int main(int argc, char *argv[]) {
 
     pthread_join(drawThread, NULL);
     pthread_join(keyboardThread, NULL);
+    sem_destroy(&mutex);
 
     wait_escape();
 
