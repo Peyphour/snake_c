@@ -89,21 +89,27 @@ void *calculateNextGeneration(void *data) {
     switch (currentDirection) {
         case LEFT:
             p->x -= STEP_W;
+            if(p->x == 0) p->x = W_WIDTH;
             break;
         case RIGHT:
             p->x += STEP_W;
+            if(p->x == W_WIDTH) p->x = 0;
             break;
         case UP:
             p->y += STEP_H;
+            if(p->y == W_HEIGHT) p->y = 0;
             break;
         case DOWN:
             p->y -= STEP_H;
+            if(p->y == 0) p->y = W_HEIGHT;
             break;
     }
 
+#if ALLOW_WALL_TRAVERSAL == 0
     if (p->x < STEP_W || p->x >= (W_WIDTH - STEP_W) || p->y < STEP_H || p->y > W_HEIGHT) {
         running = false;
     }
+#endif
 
     return p;
 }
@@ -145,7 +151,7 @@ static void *draw(void *data) {
 }
 
 static int mapAt(int x, int y) {
-    if(x >= 0 && x < W_WIDTH && y >= 0 && y < W_HEIGHT) {
+    if(x > 0 && x < W_WIDTH && y > 0 && y < W_HEIGHT) {
         POINT tmp = {x, y};
 #if DEBUG == 1
         POINT tmp1 = {tmp.x + STEP_W, tmp.y - STEP_H};
@@ -156,8 +162,27 @@ static int mapAt(int x, int y) {
         } else {
             return 1;
         }
-    } else
+    } else {
+#if ALLOW_WALL_TRAVERSAL == 1
+        POINT tmp = {x, y};
+        if(x == 0) {
+            tmp.x = W_WIDTH;
+        } else if(y == 0) {
+            tmp.y = W_HEIGHT;
+        } else if(x == W_WIDTH) {
+             tmp.x = 0;
+        } else if(y == W_HEIGHT) {
+            tmp.y = 0;
+        }
+        if(list_count_occurences(&snake, &tmp) == 0 && list_count_occurences(&obstacles, &tmp) == 0) { // No snake or obstacles in here
+            return 0;
+        } else {
+            return 1;
+        }
+#else
         return -1;
+#endif
+    }
 }
 
 static void pathNodeNeighbours(ASNeighborList neighborList, void *node, void *context) {

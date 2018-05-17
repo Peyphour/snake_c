@@ -15,6 +15,6 @@
 #define STEP_H (10)
 
 #define DEBUG 0
-#define RUN_NUMBER 2
-
+#define RUN_NUMBER 20
+#define ALLOW_WALL_TRAVERSAL 1
 #endif //UNTITLED_CONSTANTS_H
