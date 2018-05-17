@@ -5,8 +5,6 @@
 #include <semaphore.h>
 #include "astar.h"
 
-#define DEBUG 0
-
 DIRECTION currentDirection;
 int running, drawStart, autoRunning;
 POINT apple;
@@ -324,7 +322,7 @@ int main(int argc, char *argv[]) {
             autoRunning = 1;
     }
 
-    for(int i = 0; i < 10; i++) {
+    for(int i = 0; i < RUN_NUMBER; i++) {
         running = 1;
 
         affiche_auto_off();
