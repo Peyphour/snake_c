@@ -8,40 +8,48 @@
 #define DEBUG 0
 
 DIRECTION currentDirection;
-int running, drawStart, autoRunning;
+int running, drawStart, autoRunning, calculatingNewApple = 0;
 POINT apple;
 game_state state;
 list snake, obstacles;
 sem_t mutex;
 
 int random_range(int min, int max) {
-    return min + rand() / (RAND_MAX / (max - min + 1) + 1);
+    int n =  min + rand() / (RAND_MAX / (max - min + 1) + 1);
+    return (n / STEP) * STEP;
 }
 
 void new_apple() {
 
+    calculatingNewApple = 1;
+
+    POINT previousApple = {apple.x, apple.y};
     POINT p2;
     do {
-        apple.y = random_range(2, STEP - 2) * STEP_H;
-        apple.x = random_range(2, STEP - 2) * STEP_W;
+        apple.y = random_range(STEP_H * 2, W_HEIGHT - STEP_H);
+        apple.x = random_range(STEP_W * 2, W_WIDTH - STEP_W);
+
+        if(apple.x == 0) apple.x = STEP_W;
+        if(apple.y == 0) apple.y = STEP_H;
 
         p2.x = apple.x + STEP_W;
         p2.y = apple.y - STEP_H;
-    } while (list_count_occurences(&snake, &apple) > 1);
-
-    POINT start = {0, 0};
-    POINT end = {WIDTH, HEIGHT};
-    draw_fill_rectangle(start, end, black);
-
+        draw_fill_rectangle(apple, p2, vert);
+    } while (list_count_occurences(&snake, &apple) >= 1 || list_count_occurences(&obstacles, &apple) >= 1 || (previousApple.x == apple.x && previousApple.y == apple.y));
 
     draw_fill_rectangle(apple, p2, vert);
+    state.score++;
+
+    char *title = malloc(sizeof("SNAKE ") + 3 * sizeof(char));
+    sprintf(title, "SNAKE %d", state.score);
+    change_title(title);
+
+    calculatingNewApple = 0;
 }
 
 bool print_list(void *data) {
-#if DEBUG == 1
     printf("POINT(%d, %d) ", ((POINT *) data)->x, ((POINT *) data)->y);
     return (bool) TRUE;
-#endif
 }
 
 bool drawList(void *data) {
@@ -113,12 +121,15 @@ static void *draw(void *data) {
         list_for_each(&snake, recoverSnakeInBlack);
         list_prepend(&snake, calculateNextGeneration(snake.head->data));
 
+#if DEBUG == 1
         list_for_each(&snake, print_list);
         list_for_each(&obstacles, print_list);
+#endif
 
         POINT *head = snake.head->data;
         if (head->x == apple.x && head->y == apple.y) {
             new_apple();
+            while(calculatingNewApple);
         } else {
             list_delete_last(&snake);
         }
@@ -196,19 +207,19 @@ POINT get_auto_arrow() {
     ASPath path = ASPathCreate(&source, NULL, snake.head->data, &apple);
 
     if(ASPathGetCount(path) >= 1) {
+#if DEBUG == 1
         for(int i = 0; i < ASPathGetCount(path); i++) {
             POINT *node = ASPathGetNode(path, i);
-#if DEBUG == 1
             POINT drawRec = {node->x + STEP_W , node->y - STEP_H };
             draw_fill_rectangle(*node, drawRec, blanc);
-#endif
         }
+#endif
         POINT *firstDirection = ASPathGetNode(path, 1);
         POINT direction = {
                 (firstDirection->x - ((POINT*) snake.head->data)->x),
                 (firstDirection->y - ((POINT*) snake.head->data)->y)
         };
-        if((abs(direction.x + direction.y) != STEP_W && abs(direction.x + direction.y) != STEP_H) || list_count_occurences(&snake, firstDirection) > 0) {
+        if((abs(direction.x + direction.y) != STEP_W && abs(direction.x + direction.y) != STEP_H) || list_count_occurences(&snake, &firstDirection) > 0) {
             direction.x = 0; direction.y = 0;
         }
 #if DEBUG == 1
@@ -219,7 +230,11 @@ POINT get_auto_arrow() {
         sem_post(&mutex);
         return direction;
     } else {
+#if DEBUG == 1
+        printf("apple(%d, %d) ", apple.x, apple.y);
         printf("no path\n");
+        list_for_each(&snake, print_list);
+#endif
     }
     ASPathDestroy(path);
     POINT defaultDirection = {0, 0};
@@ -298,45 +313,50 @@ void initObstacles() {
     list_append(&obstacles, &e);
 }
 
+
+
 int main(int argc, char *argv[]) {
 
     XInitThreads();
     init_graphics(W_WIDTH, W_HEIGHT, "SNAKE");
+    srand((unsigned int) time(NULL));
 
     if (argc > 1) {
         if (!strcmp(argv[1], "auto"))
             autoRunning = 1;
     }
 
-    running = 1;
+    for(int i = 0; i < 10; i++) {
+        running = 1;
 
-    affiche_auto_off();
+        affiche_auto_off();
 
-    list_new(&snake, sizeof(POINT), NULL);
-    list_new(&obstacles, sizeof(POINT), NULL);
+        list_new(&snake, sizeof(POINT), NULL);
+        list_new(&obstacles, sizeof(POINT), NULL);
 
-    srand((unsigned int) time(NULL));
+        initSnake(STEP / 10, LEFT, STEP / 4, STEP / 2);
+        //initObstacles();
 
-    initSnake(STEP / 10, LEFT, STEP / 4, STEP / 2);
-    initObstacles();
+        state.apple = &apple;
+        state.snake = &snake;
+        state.score = -1;
 
-    new_apple();
+        new_apple();
 
-    state.apple = &apple;
-    state.snake = &snake;
+        sem_init(&mutex, 0, 1);
 
-    sem_init(&mutex, 0, 1);
+        pthread_t drawThread, keyboardThread;
 
-    pthread_t drawThread, keyboardThread;
+        pthread_create(&drawThread, NULL, draw, NULL);
+        pthread_create(&keyboardThread, NULL, processKeyboard, NULL);
 
-    pthread_create(&drawThread, NULL, draw, NULL);
-    pthread_create(&keyboardThread, NULL, processKeyboard, NULL);
-
-    pthread_join(drawThread, NULL);
-    pthread_join(keyboardThread, NULL);
-    sem_destroy(&mutex);
-    list_destroy(&snake);
-    list_destroy(&obstacles);
+        pthread_join(drawThread, NULL);
+        pthread_join(keyboardThread, NULL);
+        sem_destroy(&mutex);
+        list_destroy(&snake);
+        list_destroy(&obstacles);
+        fill_screen(noir);
+    }
 
     wait_escape();
 

@@ -248,6 +248,7 @@ int HEIGHT;
 
 // 2.1 Initialisation de la fen�tre sur laquelle on dessine
 void init_graphics(int W, int H, char *titre);
+void change_title(char *new_title);
 
 // 2.2 Affichage automatique ou manuel
 // Si l'affichage est automatique, chaque objet dessin�

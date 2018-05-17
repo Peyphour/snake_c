@@ -114,6 +114,10 @@ void init_graphics(int W, int H, char *titre) {
     affiche_all();
 }
 
+void change_title(char *new_title) {
+    SDL_WM_SetCaption(new_title, NULL);
+}
+
 // 2.2 Affichage automatique ou manuel
 void affiche_auto_on() { SDL_AFFICHE_AUTO = 1; }
 

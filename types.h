@@ -18,6 +18,7 @@ typedef enum {
 typedef struct {
     list *snake;
     POINT *apple;
+    int score;
 } game_state;
 
 #endif //UNTITLED_TYPES_H
