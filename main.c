@@ -8,11 +8,11 @@
 #define DEBUG 0
 
 DIRECTION currentDirection;
-int running, drawStart, autoRunning, calculatingNewApple = 0;
+int running, drawStart, autoRunning;
 POINT apple;
 game_state state;
 list snake, obstacles;
-sem_t mutex;
+sem_t mutex_astar, mutex_apple;
 
 int random_range(int min, int max) {
     int n =  min + rand() / (RAND_MAX / (max - min + 1) + 1);
@@ -20,8 +20,6 @@ int random_range(int min, int max) {
 }
 
 void new_apple() {
-
-    calculatingNewApple = 1;
 
     POINT previousApple = {apple.x, apple.y};
     POINT p2;
@@ -44,7 +42,7 @@ void new_apple() {
     sprintf(title, "SNAKE %d", state.score);
     change_title(title);
 
-    calculatingNewApple = 0;
+    sem_post(&mutex_apple);
 }
 
 bool print_list(void *data) {
@@ -115,7 +113,7 @@ void *calculateNextGeneration(void *data) {
 static void *draw(void *data) {
     while (running) {
 
-        sem_wait(&mutex);
+        sem_wait(&mutex_astar);
 
         drawStart = 1;
         list_for_each(&snake, recoverSnakeInBlack);
@@ -129,7 +127,7 @@ static void *draw(void *data) {
         POINT *head = snake.head->data;
         if (head->x == apple.x && head->y == apple.y) {
             new_apple();
-            while(calculatingNewApple);
+            sem_wait(&mutex_apple);
         } else {
             list_delete_last(&snake);
         }
@@ -141,7 +139,7 @@ static void *draw(void *data) {
             running = 0;
         affiche_all();
 
-        sem_post(&mutex);
+        sem_post(&mutex_astar);
 
         usleep(CLOCK);
     }
@@ -194,7 +192,7 @@ static float pathNodeHeuristic(void *fromNode, void *toNode, void *context) {
 
 POINT get_auto_arrow() {
 
-    sem_wait(&mutex);
+    sem_wait(&mutex_astar);
 
     ASPathNodeSource source = {
             sizeof(POINT),
@@ -227,7 +225,7 @@ POINT get_auto_arrow() {
         printf("head(%d, %d) firstDirection(%d, %d)\n", ((POINT*) snake.head->data)->x, ((POINT*) snake.head->data)->y, firstDirection->x, firstDirection->y);
 #endif
         ASPathDestroy(path);
-        sem_post(&mutex);
+        sem_post(&mutex_astar);
         return direction;
     } else {
 #if DEBUG == 1
@@ -238,7 +236,7 @@ POINT get_auto_arrow() {
     }
     ASPathDestroy(path);
     POINT defaultDirection = {0, 0};
-    sem_post(&mutex);
+    sem_post(&mutex_astar);
     return defaultDirection;
 }
 
@@ -343,7 +341,8 @@ int main(int argc, char *argv[]) {
 
         new_apple();
 
-        sem_init(&mutex, 0, 1);
+        sem_init(&mutex_astar, 0, 1);
+        sem_init(&mutex_apple, 0, 1);
 
         pthread_t drawThread, keyboardThread;
 
@@ -352,7 +351,8 @@ int main(int argc, char *argv[]) {
 
         pthread_join(drawThread, NULL);
         pthread_join(keyboardThread, NULL);
-        sem_destroy(&mutex);
+        sem_destroy(&mutex_astar);
+        sem_destroy(&mutex_apple);
         list_destroy(&snake);
         list_destroy(&obstacles);
         fill_screen(noir);
