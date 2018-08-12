@@ -19,7 +19,7 @@ int random_range(int min, int max) {
 
 void new_apple() {
 
-    fill_screen(noir);
+    fill_screen(blanc);
     POINT previousApple = {apple.x, apple.y};
     POINT p2;
     do {
@@ -31,10 +31,9 @@ void new_apple() {
 
         p2.x = apple.x + STEP_W;
         p2.y = apple.y - STEP_H;
-        draw_fill_rectangle(apple, p2, vert);
     } while (list_count_occurences(&snake, &apple) >= 1 || list_count_occurences(&obstacles, &apple) >= 1 || (previousApple.x == apple.x && previousApple.y == apple.y));
 
-    draw_fill_rectangle(apple, p2, vert);
+    draw_fill_rectangle(apple, p2, red);
     state.score++;
 
     char *title = malloc(sizeof("SNAKE ") + 3 * sizeof(char));
@@ -59,15 +58,15 @@ bool drawList(void *data) {
     POINT p2 = {p.x + STEP_W, p.y - STEP_H};
 
     if (drawStart) {
-        draw_fill_rectangle(p, p2, rouge);
+        draw_fill_rectangle(p, p2, blue);
         drawStart = 0;
     } else
-        draw_fill_rectangle(p, p2, jaune);
+        draw_fill_rectangle(p, p2, noir);
 
     return (bool) TRUE;
 }
 
-bool recoverSnakeInBlack(void *data) {
+bool coverPointInWhite(void *data) {
 
     POINT p;
 
@@ -76,7 +75,7 @@ bool recoverSnakeInBlack(void *data) {
 
     POINT p2 = {p.x + STEP_W, p.y - STEP_H};
 
-    draw_fill_rectangle(p, p2, noir);
+    draw_fill_rectangle(p, p2, blanc);
 
     return (bool) TRUE;
 }
@@ -90,19 +89,15 @@ void *calculateNextGeneration(void *data) {
     switch (currentDirection) {
         case LEFT:
             p->x -= STEP_W;
-            if(p->x == -STEP_W) p->x = W_WIDTH;
             break;
         case RIGHT:
             p->x += STEP_W;
-            if(p->x == W_WIDTH) p->x = 0;
             break;
         case UP:
             p->y += STEP_H;
-            if(p->y == W_HEIGHT) p->y = 0;
             break;
         case DOWN:
             p->y -= STEP_H;
-            if(p->y == -STEP_H) p->y = W_HEIGHT;
             break;
     }
 
@@ -110,6 +105,11 @@ void *calculateNextGeneration(void *data) {
     if (p->x < STEP_W || p->x >= (W_WIDTH - STEP_W) || p->y < STEP_H || p->y > W_HEIGHT) {
         running = false;
     }
+#else
+    if(p->x == -STEP_W) p->x = W_WIDTH;
+    if(p->x == W_WIDTH) p->x = 0;
+    if(p->y == W_HEIGHT) p->y = 0;
+    if(p->y == -STEP_H) p->y = W_HEIGHT;
 #endif
 
     return p;
@@ -121,10 +121,10 @@ static void *draw(void *data) {
         sem_wait(&mutex_astar);
 
         drawStart = 1;
-        list_for_each(&snake, recoverSnakeInBlack);
+        list_for_each(&snake, coverPointInWhite);
         list_prepend(&snake, calculateNextGeneration(snake.head->data));
 
-#if DEBUG == 1
+#if DEBUG_PRINT == 1
         list_for_each(&snake, print_list);
         list_for_each(&obstacles, print_list);
 #endif
@@ -154,7 +154,7 @@ static void *draw(void *data) {
 static int mapAt(int x, int y) {
     if(x > 0 && x < W_WIDTH && y > 0 && y < W_HEIGHT) {
         POINT tmp = {x, y};
-#if DEBUG == 1
+#if DEBUG_GRAPHICS == 1
         POINT tmp1 = {tmp.x + STEP_W, tmp.y - STEP_H};
         draw_fill_rectangle(tmp, tmp1, rouge);
 #endif
@@ -166,6 +166,11 @@ static int mapAt(int x, int y) {
     } else {
 #if ALLOW_WALL_TRAVERSAL == 1
         POINT tmp = {x, y};
+#if DEBUG_GRAPHICS == 1
+        POINT tmp1 = {tmp.x + STEP_W, tmp.y - STEP_H};
+        draw_fill_rectangle(tmp, tmp1, rouge);
+#endif
+        printf("map at for wall traversal %d %d", x, y);
         if(x == 0) {
             tmp.x = W_WIDTH;
         } else if(y == 0) {
@@ -176,8 +181,10 @@ static int mapAt(int x, int y) {
             tmp.y = 0;
         }
         if(list_count_occurences(&snake, &tmp) == 0 && list_count_occurences(&obstacles, &tmp) == 0) { // No snake or obstacles in here
+            printf(" no obstacle\n");
             return 0;
         } else {
+            printf(" obsctacle\n");
             return 1;
         }
 #else
@@ -207,7 +214,7 @@ static void pathNodeNeighbours(ASNeighborList neighborList, void *node, void *co
     }
 }
 
-static float pathNodeHeuristic(void *fromNode, void *toNode, void *context) {
+static float manhattan_distance(void *fromNode, void *toNode, void *context) {
     POINT *from = fromNode;
     POINT *to = toNode;
 
@@ -221,7 +228,7 @@ POINT get_auto_arrow() {
     ASPathNodeSource source = {
             sizeof(POINT),
             &pathNodeNeighbours,
-            &pathNodeHeuristic,
+            &manhattan_distance,
             NULL,
             NULL
     };
@@ -229,11 +236,11 @@ POINT get_auto_arrow() {
     ASPath path = ASPathCreate(&source, NULL, snake.head->data, &apple);
 
     if(ASPathGetCount(path) >= 1) {
-#if DEBUG == 1
+#if DEBUG_GRAPHICS == 1
         for(int i = 0; i < ASPathGetCount(path) - 1; i++) {
             POINT *node = ASPathGetNode(path, i);
             POINT drawRec = {node->x + STEP_W , node->y - STEP_H };
-            draw_fill_rectangle(*node, drawRec, blanc);
+            draw_fill_rectangle(*node, drawRec, cyan);
         }
 #endif
         POINT *firstDirection = ASPathGetNode(path, 1);
@@ -244,7 +251,7 @@ POINT get_auto_arrow() {
         if((abs(direction.x + direction.y) != STEP_W && abs(direction.x + direction.y) != STEP_H) || list_count_occurences(&snake, &firstDirection) > 0) {
             direction.x = 0; direction.y = 0;
         }
-#if DEBUG == 1
+#if DEBUG_PRINT == 1
         printf("direction(%d, %d) ", direction.x, direction.y);
         printf("head(%d, %d) firstDirection(%d, %d)\n", ((POINT*) snake.head->data)->x, ((POINT*) snake.head->data)->y, firstDirection->x, firstDirection->y);
 #endif
@@ -252,7 +259,7 @@ POINT get_auto_arrow() {
         sem_post(&mutex_astar);
         return direction;
     } else {
-#if DEBUG == 1
+#if DEBUG_PRINT == 1
         printf("apple(%d, %d) ", apple.x, apple.y);
         printf("no path\n");
         list_for_each(&snake, print_list);
@@ -341,6 +348,7 @@ int main(int argc, char *argv[]) {
 
     XInitThreads();
     init_graphics(W_WIDTH, W_HEIGHT, "SNAKE");
+    fill_screen(blanc);
     srand((unsigned int) time(NULL));
 
     if (argc > 1) {
